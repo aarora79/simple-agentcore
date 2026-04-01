@@ -1,0 +1,18 @@
+[project]
+name = "simple-agentcore"
+version = "0.1.0"
+description = "Simple examples for deploying agents and MCP servers on Amazon Bedrock AgentCore"
+requires-python = ">=3.11"
+dependencies = [
+    "strands-agents",
+    "strands-agents-tools",
+    "boto3",
+    "bedrock-agentcore<=0.1.5",
+    "bedrock-agentcore-starter-toolkit==0.1.14",
+    "requests",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "ruff>=0.1.0",
+]

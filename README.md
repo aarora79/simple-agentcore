@@ -36,6 +36,8 @@ Agent names must start with a letter and contain only letters, numbers, and unde
 
 Supports two authentication modes: IAM (SigV4, default) and Cognito (JWT bearer tokens).
 
+> **Registry Integration**: Generate an agent card for the [mcp-gateway-registry](https://github.com/agentic-community/mcp-gateway-registry) using the Claude Code skill at [`.claude/skills/generate-agent-card/SKILL.md`](.claude/skills/generate-agent-card/SKILL.md). Run `/generate-agent-card simple-agent/` in Claude Code to create a registry-compatible agent card JSON.
+
 ```bash
 cd simple-agent
 
@@ -67,6 +69,8 @@ Same calculator agent but using the A2A protocol. This enables agent card discov
 
 The `client.py` reads the agent ARN automatically from `.bedrock_agentcore.yaml` (created after deployment), so no hardcoding is needed.
 
+> **Registry Integration**: Generate an A2A agent card for the [mcp-gateway-registry](https://github.com/agentic-community/mcp-gateway-registry) using the Claude Code skill at [`.claude/skills/generate-agent-card/SKILL.md`](.claude/skills/generate-agent-card/SKILL.md). Run `/generate-agent-card simple-a2a-agent/` in Claude Code to create a registry-compatible agent card JSON.
+
 ```bash
 cd simple-a2a-agent
 
@@ -89,11 +93,40 @@ uv run python deploy_a2a_agent.py --agent-name my_a2a_agent --region us-east-1 -
 uv run python deploy_a2a_agent.py --agent-name my_a2a_agent --region us-east-1 --delete
 ```
 
+#### Deriving the A2A Agent Card URL
+
+The A2A agent card is served at `/.well-known/agent.json` relative to the runtime endpoint. To get the agent card URL from the agent ARN:
+
+```bash
+cd simple-a2a-agent
+
+# Step 1: Get the agent endpoint URL from the agent ARN
+# The ARN is saved in .bedrock_agentcore.yaml after deployment
+AGENT_ARN=$(python3 -c "import yaml; print(yaml.safe_load(open('.bedrock_agentcore.yaml'))['agent_arn'])")
+REGION=$(python3 -c "import yaml; print(yaml.safe_load(open('.bedrock_agentcore.yaml'))['region'])")
+ESCAPED_ARN=$(python3 -c "from urllib.parse import quote; print(quote('${AGENT_ARN}', safe=''))")
+
+# Step 2: The runtime URL (this is the agent endpoint)
+RUNTIME_URL="https://bedrock-agentcore.${REGION}.amazonaws.com/runtimes/${ESCAPED_ARN}/invocations/"
+echo "Agent endpoint: ${RUNTIME_URL}"
+
+# Step 3: The agent card URL is at /.well-known/agent.json relative to the endpoint
+AGENT_CARD_URL="${RUNTIME_URL}.well-known/agent.json"
+echo "Agent card URL: ${AGENT_CARD_URL}"
+
+# Step 4: Fetch the agent card (requires SigV4 auth, use client.py)
+uv run python client.py --agent-card-only
+```
+
+Note: The agent card endpoint requires SigV4 authentication (same as agent invocation). Use `client.py --agent-card-only` which handles auth automatically and saves the card to `agent_card.json`.
+
 ### simple-mcp/ (MCP Server on Gateway)
 
 Deploys ipwho.is (free HTTPS geolocation API) as an MCP server on AgentCore Gateway with Cognito JWT authorization.
 
 Note: Gateway names use hyphens (not underscores), unlike agent names.
+
+> **Registry Integration**: Generate an MCP server card for the [mcp-gateway-registry](https://github.com/agentic-community/mcp-gateway-registry) using the Claude Code skill at [`.claude/skills/generate-server-card/SKILL.md`](.claude/skills/generate-server-card/SKILL.md). Run `/generate-server-card simple-mcp/` in Claude Code to create a registry-compatible server card JSON.
 
 ```bash
 cd simple-mcp

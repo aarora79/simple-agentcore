@@ -59,6 +59,9 @@ uv run python deploy_agent.py --agent-name my_simple_agent --region us-east-1 --
 # Check status
 uv run python deploy_agent.py --agent-name my_simple_agent --region us-east-1 --status-only
 
+# Refresh Cognito token only (standalone script, saves to .token)
+./get_token.sh
+
 # Delete agent and Cognito resources
 uv run python deploy_agent.py --agent-name my_simple_agent --region us-east-1 --delete
 ```
@@ -93,40 +96,38 @@ uv run python deploy_a2a_agent.py --agent-name my_a2a_agent --region us-east-1 -
 
 #### Getting the A2A Agent Card
 
-Since this is an A2A agent, the agent card is available directly from the runtime endpoint at `/.well-known/agent.json`. You can derive the full URL from the agent ARN:
+Since this is an A2A agent, the agent card is available directly from the runtime endpoint at `/.well-known/agent.json`. The endpoint requires SigV4 authentication (plain `curl` will not work), so use `client.py` which handles auth automatically:
 
 ```bash
 cd simple-a2a-agent
 
-# Step 1: Get the agent ARN and region from .bedrock_agentcore.yaml
-# The file is created after deployment, values are nested under the agent name
-AGENT_ARN=$(python3 -c "
-import yaml
-cfg = yaml.safe_load(open('.bedrock_agentcore.yaml'))
-agent = cfg['agents'][cfg['default_agent']]
-print(agent['bedrock_agentcore']['agent_arn'])
-")
-REGION=$(python3 -c "
-import yaml
-cfg = yaml.safe_load(open('.bedrock_agentcore.yaml'))
-agent = cfg['agents'][cfg['default_agent']]
-print(agent['aws']['region'])
-")
-ESCAPED_ARN=$(python3 -c "from urllib.parse import quote; print(quote('${AGENT_ARN}', safe=''))")
-
-# Step 2: The runtime URL (this is the agent endpoint)
-RUNTIME_URL="https://bedrock-agentcore.${REGION}.amazonaws.com/runtimes/${ESCAPED_ARN}/invocations/"
-echo "Agent endpoint: ${RUNTIME_URL}"
-
-# Step 3: The agent card URL is at /.well-known/agent.json relative to the endpoint
-AGENT_CARD_URL="${RUNTIME_URL}.well-known/agent.json"
-echo "Agent card URL: ${AGENT_CARD_URL}"
-
-# Step 4: Fetch the agent card (requires SigV4 auth, use client.py)
+# Fetch the agent card (handles SigV4 auth, saves to agent_card.json)
 uv run python client.py --agent-card-only
 ```
 
-Note: The agent card endpoint requires SigV4 authentication (same as agent invocation). Use `client.py --agent-card-only` which handles auth automatically and saves the card to `agent_card.json`.
+The agent card URL is derived from the agent ARN as follows:
+
+```
+Runtime URL:    https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{url-encoded-arn}/invocations/
+Agent card URL: https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{url-encoded-arn}/invocations/.well-known/agent.json
+```
+
+To print the full URLs for your deployed agent:
+
+```bash
+python3 -c "
+import yaml
+from urllib.parse import quote
+cfg = yaml.safe_load(open('.bedrock_agentcore.yaml'))
+agent = cfg['agents'][cfg['default_agent']]
+arn = agent['bedrock_agentcore']['agent_arn']
+region = agent['aws']['region']
+escaped = quote(arn, safe='')
+runtime = f'https://bedrock-agentcore.{region}.amazonaws.com/runtimes/{escaped}/invocations/'
+print(f'Agent endpoint:   {runtime}')
+print(f'Agent card URL:   {runtime}.well-known/agent.json')
+"
+```
 
 > **Registry Integration**: Alternatively, you can generate a registry-compatible agent card using the Claude Code skill at [`.claude/skills/generate-agent-card/SKILL.md`](.claude/skills/generate-agent-card/SKILL.md) (`/generate-agent-card simple-a2a-agent/`). This is useful for registering with [mcp-gateway-registry](https://github.com/agentic-community/mcp-gateway-registry), but since this is an A2A agent the card can be fetched directly from the live endpoint as shown above.
 

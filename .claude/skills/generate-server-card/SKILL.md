@@ -1,7 +1,7 @@
 ---
 name: generate-server-card
 description: Generate an MCP server card JSON (mcp-gateway-registry format) by analyzing server source code in a folder or GitHub URL. Studies code to detect server name, tools, transport, auth, and generates a registry-compatible config.
-argument-hint: [folder-path-or-github-url]
+argument-hint: "[folder-path-or-github-url]"
 disable-model-invocation: true
 ---
 

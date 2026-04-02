@@ -1,7 +1,7 @@
 ---
 name: generate-agent-card
 description: Generate an A2A agent card JSON by analyzing agent source code in a folder or GitHub URL. Studies the code to detect agent name, skills, tools, auth, protocol, and generates a spec-compliant agent card.
-argument-hint: [folder-path-or-github-url]
+argument-hint: "[folder-path-or-github-url]"
 disable-model-invocation: true
 ---
 

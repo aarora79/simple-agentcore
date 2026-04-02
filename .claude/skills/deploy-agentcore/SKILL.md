@@ -1,7 +1,7 @@
 ---
 name: deploy-agentcore
-description: Deploy an agent or MCP server to Amazon Bedrock AgentCore. Covers HTTP agents, A2A agents, and MCP Gateway servers. Includes naming rules, auth patterns, boto3 client usage, and common pitfalls.
-argument-hint: [http-agent|a2a-agent|mcp-server] [folder-path]
+description: "Deploy an agent or MCP server to Amazon Bedrock AgentCore. Covers HTTP agents, A2A agents, and MCP Gateway servers. Includes naming rules, auth patterns, boto3 client usage, and common pitfalls."
+argument-hint: "[http-agent|a2a-agent|mcp-server] [folder-path]"
 ---
 
 # Deploy to Amazon Bedrock AgentCore

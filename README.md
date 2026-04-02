@@ -69,8 +69,6 @@ Same calculator agent but using the A2A protocol. This enables agent card discov
 
 The `client.py` reads the agent ARN automatically from `.bedrock_agentcore.yaml` (created after deployment), so no hardcoding is needed.
 
-> **Registry Integration**: Generate an A2A agent card for the [mcp-gateway-registry](https://github.com/agentic-community/mcp-gateway-registry) using the Claude Code skill at [`.claude/skills/generate-agent-card/SKILL.md`](.claude/skills/generate-agent-card/SKILL.md). Run `/generate-agent-card simple-a2a-agent/` in Claude Code to create a registry-compatible agent card JSON.
-
 ```bash
 cd simple-a2a-agent
 
@@ -93,17 +91,27 @@ uv run python deploy_a2a_agent.py --agent-name my_a2a_agent --region us-east-1 -
 uv run python deploy_a2a_agent.py --agent-name my_a2a_agent --region us-east-1 --delete
 ```
 
-#### Deriving the A2A Agent Card URL
+#### Getting the A2A Agent Card
 
-The A2A agent card is served at `/.well-known/agent.json` relative to the runtime endpoint. To get the agent card URL from the agent ARN:
+Since this is an A2A agent, the agent card is available directly from the runtime endpoint at `/.well-known/agent.json`. You can derive the full URL from the agent ARN:
 
 ```bash
 cd simple-a2a-agent
 
-# Step 1: Get the agent endpoint URL from the agent ARN
-# The ARN is saved in .bedrock_agentcore.yaml after deployment
-AGENT_ARN=$(python3 -c "import yaml; print(yaml.safe_load(open('.bedrock_agentcore.yaml'))['agent_arn'])")
-REGION=$(python3 -c "import yaml; print(yaml.safe_load(open('.bedrock_agentcore.yaml'))['region'])")
+# Step 1: Get the agent ARN and region from .bedrock_agentcore.yaml
+# The file is created after deployment, values are nested under the agent name
+AGENT_ARN=$(python3 -c "
+import yaml
+cfg = yaml.safe_load(open('.bedrock_agentcore.yaml'))
+agent = cfg['agents'][cfg['default_agent']]
+print(agent['bedrock_agentcore']['agent_arn'])
+")
+REGION=$(python3 -c "
+import yaml
+cfg = yaml.safe_load(open('.bedrock_agentcore.yaml'))
+agent = cfg['agents'][cfg['default_agent']]
+print(agent['aws']['region'])
+")
 ESCAPED_ARN=$(python3 -c "from urllib.parse import quote; print(quote('${AGENT_ARN}', safe=''))")
 
 # Step 2: The runtime URL (this is the agent endpoint)
@@ -119,6 +127,8 @@ uv run python client.py --agent-card-only
 ```
 
 Note: The agent card endpoint requires SigV4 authentication (same as agent invocation). Use `client.py --agent-card-only` which handles auth automatically and saves the card to `agent_card.json`.
+
+> **Registry Integration**: Alternatively, you can generate a registry-compatible agent card using the Claude Code skill at [`.claude/skills/generate-agent-card/SKILL.md`](.claude/skills/generate-agent-card/SKILL.md) (`/generate-agent-card simple-a2a-agent/`). This is useful for registering with [mcp-gateway-registry](https://github.com/agentic-community/mcp-gateway-registry), but since this is an A2A agent the card can be fetched directly from the live endpoint as shown above.
 
 ### simple-mcp/ (MCP Server on Gateway)
 

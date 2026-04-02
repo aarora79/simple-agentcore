@@ -1,0 +1,31 @@
+{
+  "server_name": "Geolocation MCP Server",
+  "description": "IP geolocation lookup via ipwho.is, deployed on Amazon Bedrock AgentCore Gateway with Cognito JWT auth",
+  "path": "/geo-mcp",
+  "proxy_pass_url": "https://geo-mcp-rqqjviriim.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp",
+  "supported_transports": [
+    "streamable-http"
+  ],
+  "auth_scheme": "bearer",
+  "mcp_endpoint": "https://geo-mcp-rqqjviriim.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp",
+  "tags": [
+    "geolocation",
+    "ip-lookup",
+    "aws",
+    "bedrock-agentcore",
+    "cognito"
+  ],
+  "num_tools": 1,
+  "version": "1.0.0",
+  "status": "active",
+  "visibility": "public",
+  "provider_organization": "AWS",
+  "provider_url": "https://aws.amazon.com",
+  "license": "MIT",
+  "metadata": {
+    "category": "geolocation",
+    "official": false,
+    "mcp_compatible": "1.0"
+  },
+  "tool_list": []
+}

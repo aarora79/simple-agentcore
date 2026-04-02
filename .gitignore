@@ -34,3 +34,11 @@ Thumbs.db
 .scratchpad/
 .bedrock_agentcore.yaml
 .container_uri
+debug.log
+Dockerfile
+.dockerignore
+.deployment_info.json
+agent_card.json
+.cognito_config.json
+.token
+.roo.json

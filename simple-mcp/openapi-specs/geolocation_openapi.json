@@ -1,0 +1,129 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "IP Geolocation API",
+    "description": "Free IP geolocation API that provides location data for any IP address. Uses ipwho.is (HTTPS, no API key required).",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://ipwho.is"
+    }
+  ],
+  "paths": {
+    "/{ipAddress}": {
+      "get": {
+        "operationId": "getGeolocationByIp",
+        "summary": "Get geolocation data for a specific IP address",
+        "description": "Returns geolocation information including country, region, city, latitude, longitude, timezone, and ISP for the given IP address.",
+        "parameters": [
+          {
+            "name": "ipAddress",
+            "in": "path",
+            "required": true,
+            "description": "The IP address to look up (IPv4 or IPv6)",
+            "schema": {
+              "type": "string",
+              "example": "8.8.8.8"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful geolocation lookup",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeolocationResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "GeolocationResponse": {
+        "type": "object",
+        "properties": {
+          "ip": {
+            "type": "string",
+            "description": "IP address queried"
+          },
+          "success": {
+            "type": "boolean",
+            "description": "Whether the lookup was successful"
+          },
+          "type": {
+            "type": "string",
+            "description": "IP version (IPv4 or IPv6)"
+          },
+          "continent": {
+            "type": "string",
+            "description": "Continent name"
+          },
+          "country": {
+            "type": "string",
+            "description": "Country name"
+          },
+          "country_code": {
+            "type": "string",
+            "description": "Two-letter country code"
+          },
+          "region": {
+            "type": "string",
+            "description": "Region/state name"
+          },
+          "city": {
+            "type": "string",
+            "description": "City name"
+          },
+          "latitude": {
+            "type": "number",
+            "description": "Latitude"
+          },
+          "longitude": {
+            "type": "number",
+            "description": "Longitude"
+          },
+          "postal": {
+            "type": "string",
+            "description": "Postal/zip code"
+          },
+          "timezone": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Timezone ID (e.g., America/Los_Angeles)"
+              },
+              "utc": {
+                "type": "string",
+                "description": "UTC offset (e.g., -07:00)"
+              }
+            }
+          },
+          "connection": {
+            "type": "object",
+            "properties": {
+              "isp": {
+                "type": "string",
+                "description": "Internet Service Provider name"
+              },
+              "org": {
+                "type": "string",
+                "description": "Organization name"
+              },
+              "asn": {
+                "type": "integer",
+                "description": "Autonomous System Number"
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

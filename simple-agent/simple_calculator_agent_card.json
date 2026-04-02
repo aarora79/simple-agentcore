@@ -1,0 +1,60 @@
+{
+  "name": "SimpleCalculatorAgent",
+  "description": "A simple Strands agent with a calculator tool, hosted on Amazon Bedrock AgentCore Runtime. It can evaluate mathematical expressions and explain calculations step by step.",
+  "version": "1.0.0",
+  "supportedInterfaces": [
+    {
+      "url": "https://bedrock-agentcore.us-east-1.amazonaws.com/runtimes/arn%3Aaws%3Abedrock-agentcore%3Aus-east-1%3A015469603702%3Aruntime%2Fmy_simple_agent-64D87XBVqh/invocations/",
+      "protocolBinding": "HTTP+JSON",
+      "protocolVersion": "1.0"
+    }
+  ],
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false
+  },
+  "defaultInputModes": [
+    "text/plain"
+  ],
+  "defaultOutputModes": [
+    "text/plain"
+  ],
+  "skills": [
+    {
+      "id": "calculator",
+      "name": "Calculator",
+      "description": "Evaluate a mathematical expression and return the result. Supports basic arithmetic operations including addition, subtraction, multiplication, division, and parentheses.",
+      "tags": [
+        "math",
+        "calculator",
+        "arithmetic"
+      ],
+      "examples": [
+        "What is 42 * 17 + 99?",
+        "Calculate 3.14 * (10 / 2)",
+        "What is 15% of 200?"
+      ]
+    }
+  ],
+  "securitySchemes": {
+    "sigv4": {
+      "httpAuthSecurityScheme": {
+        "scheme": "AWS4-HMAC-SHA256",
+        "description": "AWS SigV4 request signing (default IAM auth)"
+      }
+    },
+    "bearerAuth": {
+      "httpAuthSecurityScheme": {
+        "scheme": "Bearer",
+        "description": "Cognito JWT bearer token (optional auth mode)"
+      }
+    }
+  },
+  "securityRequirements": [
+    {
+      "schemes": {
+        "sigv4": []
+      }
+    }
+  ]
+}

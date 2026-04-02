@@ -4,15 +4,20 @@ version = "0.1.0"
 description = "Simple examples for deploying agents and MCP servers on Amazon Bedrock AgentCore"
 requires-python = ">=3.11"
 dependencies = [
-    "strands-agents",
+    "strands-agents[a2a]",
     "strands-agents-tools",
     "boto3",
-    "bedrock-agentcore<=0.1.5",
-    "bedrock-agentcore-starter-toolkit==0.1.14",
+    "bedrock-agentcore>=1.2.0",
+    "bedrock-agentcore-starter-toolkit>=0.3.0",
     "requests",
+    "a2a-python>=0.0.1",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "httpx>=0.24.0",
+    "pyyaml>=6.0",
 ]
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "ruff>=0.1.0",
 ]

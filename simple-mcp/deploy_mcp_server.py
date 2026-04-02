@@ -51,6 +51,8 @@ CLIENT_NAME = "SimpleAgentCoreMCPClient"
 OPENAPI_SPEC_FILE = "openapi-specs/geolocation_openapi.json"
 IAM_ROLE_CREATION_WAIT_SECONDS = 10
 GATEWAY_TARGET_READY_WAIT_SECONDS = 10
+GATEWAY_POLL_INTERVAL_SECONDS = 10
+GATEWAY_MAX_POLL_ATTEMPTS = 30
 SCOPES = [
     {
         "ScopeName": "gateway:read",
@@ -359,7 +361,7 @@ def _create_gateway(
     Returns:
         Tuple of (gateway_id, gateway_url)
     """
-    gateway_client = boto3.client("bedrock-agentcore", region_name=region)
+    gateway_client = boto3.client("bedrock-agentcore-control", region_name=region)
 
     auth_config = {
         "customJWTAuthorizer": {
@@ -386,7 +388,76 @@ def _create_gateway(
     logger.info(f"Gateway created - ID: {gateway_id}")
     logger.info(f"Gateway URL: {gateway_url}")
 
+    # Wait for gateway to become ACTIVE
+    _wait_for_gateway_ready(gateway_client, gateway_id)
+
     return gateway_id, gateway_url
+
+
+def _wait_for_gateway_ready(
+    gateway_client,
+    gateway_id: str,
+) -> None:
+    """Poll until the gateway is in ACTIVE status.
+
+    Args:
+        gateway_client: The bedrock-agentcore-control boto3 client
+        gateway_id: Gateway ID to poll
+    """
+    for attempt in range(1, GATEWAY_MAX_POLL_ATTEMPTS + 1):
+        response = gateway_client.get_gateway(gatewayIdentifier=gateway_id)
+        status = response.get("status", "UNKNOWN")
+        logger.info(f"Gateway poll {attempt}/{GATEWAY_MAX_POLL_ATTEMPTS}: status={status}")
+
+        if status in ("ACTIVE", "READY"):
+            logger.info(f"Gateway is {status}")
+            return
+
+        if status in ("CREATE_FAILED", "DELETE_FAILED", "UPDATE_FAILED"):
+            raise RuntimeError(f"Gateway entered terminal state: {status}")
+
+        time.sleep(GATEWAY_POLL_INTERVAL_SECONDS)
+
+    raise TimeoutError(
+        f"Gateway did not become ready after {GATEWAY_MAX_POLL_ATTEMPTS * GATEWAY_POLL_INTERVAL_SECONDS}s"
+    )
+
+
+def _wait_for_target_ready(
+    gateway_client,
+    gateway_id: str,
+    target_id: str,
+) -> None:
+    """Poll until the gateway target is in ACTIVE status.
+
+    Args:
+        gateway_client: The bedrock-agentcore-control boto3 client
+        gateway_id: Gateway ID
+        target_id: Target ID to poll
+    """
+    for attempt in range(1, GATEWAY_MAX_POLL_ATTEMPTS + 1):
+        response = gateway_client.get_gateway_target(
+            gatewayIdentifier=gateway_id,
+            targetId=target_id,
+        )
+        status = response.get("status", "UNKNOWN")
+        logger.info(f"Target poll {attempt}/{GATEWAY_MAX_POLL_ATTEMPTS}: status={status}")
+
+        if status in ("ACTIVE", "READY"):
+            logger.info(f"Gateway target is {status}")
+            return
+
+        if status in ("CREATE_FAILED", "DELETE_FAILED", "UPDATE_FAILED", "FAILED"):
+            status_reason = response.get("statusReason", "unknown")
+            raise RuntimeError(
+                f"Gateway target entered terminal state: {status}, reason: {status_reason}"
+            )
+
+        time.sleep(GATEWAY_POLL_INTERVAL_SECONDS)
+
+    raise TimeoutError(
+        f"Gateway target did not become ready after {GATEWAY_MAX_POLL_ATTEMPTS * GATEWAY_POLL_INTERVAL_SECONDS}s"
+    )
 
 
 def _upload_openapi_spec_to_s3(
@@ -440,29 +511,71 @@ def _upload_openapi_spec_to_s3(
     return s3_uri
 
 
+def _create_api_key_credential_provider(
+    gateway_name: str,
+    region: str,
+) -> str:
+    """Create an API key credential provider for the gateway target.
+
+    The ip-api.com API is free and does not require an API key,
+    but OpenAPI targets in AgentCore Gateway require an API_KEY
+    credential provider. A placeholder key is used.
+
+    Args:
+        gateway_name: Gateway name (used in provider naming)
+        region: AWS region
+
+    Returns:
+        Credential provider ARN
+    """
+    gateway_client = boto3.client("bedrock-agentcore-control", region_name=region)
+    provider_name = f"{gateway_name}-api-key"
+
+    # Check if provider already exists
+    try:
+        response = gateway_client.list_api_key_credential_providers()
+        for provider in response.get("credentialProviders", []):
+            if provider.get("name") == provider_name:
+                arn = provider["credentialProviderArn"]
+                logger.info(f"Found existing API key credential provider: {arn}")
+                return arn
+    except Exception as e:
+        logger.debug(f"Could not list credential providers: {e}")
+
+    logger.info(f"Creating API key credential provider: {provider_name}")
+    response = gateway_client.create_api_key_credential_provider(
+        name=provider_name,
+        apiKey="placeholder-not-used",
+    )
+    arn = response["credentialProviderArn"]
+    logger.info(f"Created API key credential provider: {arn}")
+    return arn
+
+
 def _create_gateway_target(
     gateway_id: str,
     gateway_name: str,
     openapi_s3_uri: str,
+    credential_provider_arn: str,
     region: str,
 ) -> str:
     """Create a gateway target pointing to the geolocation OpenAPI spec.
-
-    The geolocation API (ip-api.com) is free and requires no API key,
-    so no outbound credential provider is needed.
 
     Args:
         gateway_id: AgentCore Gateway ID
         gateway_name: Gateway name (used in target naming)
         openapi_s3_uri: S3 URI of the OpenAPI spec
+        credential_provider_arn: ARN of the API key credential provider
         region: AWS region
 
     Returns:
         Target ID
     """
-    gateway_client = boto3.client("bedrock-agentcore", region_name=region)
+    gateway_client = boto3.client("bedrock-agentcore-control", region_name=region)
 
-    target_name = f"{gateway_name}-geolocation-target"
+    # Target name becomes part of MCP tool name: {targetName}___{operationId}
+    # Bedrock tool names must match [a-zA-Z][a-zA-Z0-9_]* (no hyphens, max 64 chars)
+    target_name = "geolocation"
 
     target_config = {
         "mcp": {
@@ -474,6 +587,19 @@ def _create_gateway_target(
         }
     }
 
+    credential_config = [
+        {
+            "credentialProviderType": "API_KEY",
+            "credentialProvider": {
+                "apiKeyCredentialProvider": {
+                    "providerArn": credential_provider_arn,
+                    "credentialParameterName": "api_key",
+                    "credentialLocation": "QUERY_PARAMETER",
+                }
+            },
+        }
+    ]
+
     logger.info(f"Creating gateway target '{target_name}'...")
     logger.info(f"Target config:\n{json.dumps(target_config, indent=2)}")
 
@@ -482,14 +608,14 @@ def _create_gateway_target(
         name=target_name,
         description="IP geolocation API (ip-api.com) - free, no auth required",
         targetConfiguration=target_config,
+        credentialProviderConfigurations=credential_config,
     )
 
     target_id = response["targetId"]
     logger.info(f"Gateway target created - ID: {target_id}")
 
-    # Wait for target to be ready
-    logger.info(f"Waiting {GATEWAY_TARGET_READY_WAIT_SECONDS}s for target to be ready...")
-    time.sleep(GATEWAY_TARGET_READY_WAIT_SECONDS)
+    # Wait for target to become ACTIVE
+    _wait_for_target_ready(gateway_client, gateway_id, target_id)
 
     return target_id
 
@@ -534,7 +660,8 @@ def _invoke_mcp_agent(
 
     with mcp_client:
         tools = mcp_client.list_tools_sync()
-        logger.info(f"Available MCP tools: {[t.name for t in tools]}")
+        tool_names = [getattr(t, 'tool_name', getattr(t, 'name', str(t))) for t in tools]
+        logger.info(f"Available MCP tools: {tool_names}")
 
         agent = Agent(model=model, tools=tools)
         response = agent(prompt)
@@ -557,7 +684,7 @@ def _delete_all_resources(
         gateway_name: Gateway name
         region: AWS region
     """
-    gateway_client = boto3.client("bedrock-agentcore", region_name=region)
+    gateway_client = boto3.client("bedrock-agentcore-control", region_name=region)
     cognito = boto3.client("cognito-idp", region_name=region)
     iam_client = boto3.client("iam")
 
@@ -576,11 +703,29 @@ def _delete_all_resources(
                         targetId=target["targetId"],
                     )
                     logger.info(f"Deleted target: {target['targetId']}")
+                    time.sleep(5)
+
+                # Wait for targets to fully delete
+                logger.info("Waiting for targets to fully delete...")
+                time.sleep(10)
 
                 gateway_client.delete_gateway(gatewayIdentifier=gw_id)
                 logger.info(f"Deleted gateway: {gw_id}")
     except Exception as e:
         logger.warning(f"Error deleting gateway: {e}")
+
+    # Delete API key credential provider
+    provider_name = f"{gateway_name}-api-key"
+    try:
+        response = gateway_client.list_api_key_credential_providers()
+        for provider in response.get("credentialProviders", []):
+            if provider.get("name") == provider_name:
+                gateway_client.delete_api_key_credential_provider(
+                    name=provider_name,
+                )
+                logger.info(f"Deleted API key credential provider: {provider_name}")
+    except Exception as e:
+        logger.warning(f"Error deleting credential provider: {e}")
 
     # Delete Cognito resources
     try:
@@ -649,6 +794,48 @@ def _save_deployment_info(
         json.dump(info, f, indent=2)
 
     logger.info(f"Deployment info saved to: {info_path}")
+
+
+def _generate_roo_config(
+    gateway_url: str,
+    token: str,
+) -> None:
+    """Generate .roo.json with MCP endpoint and bearer token for Roo Code.
+
+    This file can be copy-pasted into Roo Code's MCP settings.
+
+    Args:
+        gateway_url: The AgentCore Gateway MCP URL
+        token: Bearer token for authentication
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # Save token to .token file
+    token_path = os.path.join(script_dir, ".token")
+    with open(token_path, "w") as f:
+        f.write(token)
+    logger.info(f"Token saved to: {token_path}")
+
+    # Generate .roo.json
+    roo_config = {
+        "mcpServers": {
+            "agentcore-geo-mcp": {
+                "type": "streamable-http",
+                "url": gateway_url,
+                "disabled": False,
+                "headers": {
+                    "Authorization": f"Bearer {token}",
+                },
+            }
+        }
+    }
+
+    roo_path = os.path.join(script_dir, ".roo.json")
+    with open(roo_path, "w") as f:
+        json.dump(roo_config, f, indent=2)
+
+    logger.info(f"Roo Code MCP config saved to: {roo_path}")
+    logger.info("Copy the contents of .roo.json into Roo Code MCP settings")
 
 
 def _load_deployment_info() -> dict:
@@ -746,6 +933,7 @@ def main():
         client_secret = describe["UserPoolClient"]["ClientSecret"]
 
         token = _get_cognito_token(user_pool_id, client_id, client_secret, region)
+        _generate_roo_config(gateway_url, token)
         _invoke_mcp_agent(gateway_url, token, args.prompt)
         return
 
@@ -770,14 +958,18 @@ def main():
     # Step 4: Upload OpenAPI spec to S3
     openapi_s3_uri = _upload_openapi_spec_to_s3(args.gateway_name, region)
 
-    # Step 5: Create gateway target
-    _create_gateway_target(gateway_id, args.gateway_name, openapi_s3_uri, region)
+    # Step 5: Create API key credential provider
+    credential_provider_arn = _create_api_key_credential_provider(args.gateway_name, region)
 
-    # Step 6: Save deployment info for later use
+    # Step 6: Create gateway target
+    _create_gateway_target(gateway_id, args.gateway_name, openapi_s3_uri, credential_provider_arn, region)
+
+    # Step 7: Save deployment info for later use
     _save_deployment_info(gateway_name=args.gateway_name, gateway_id=gateway_id, gateway_url=gateway_url, user_pool_id=user_pool_id, client_id=client_id)
 
-    # Step 7: Get token and invoke
+    # Step 8: Get token, generate Roo config, and invoke
     token = _get_cognito_token(user_pool_id, client_id, client_secret, region)
+    _generate_roo_config(gateway_url, token)
     _invoke_mcp_agent(gateway_url, token, args.prompt)
 
 

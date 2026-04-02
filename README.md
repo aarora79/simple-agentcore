@@ -1,4 +1,4 @@
-# simple-agentcore
+# Simple AgentCore examples
 
 Simple examples for deploying agents and MCP servers on Amazon Bedrock AgentCore.
 
